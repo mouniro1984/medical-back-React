@@ -148,7 +148,7 @@ app.use(cors());
 app.use(express.json());
 
 // Connect to MongoDB
-mongoose.connect('mongodb://localhost:27017/medical-app')
+mongoose.connect('mongodb+srv://mounirnachit:Ai8W9rq1nK89VGFN@cluster-medical.eoezo.mongodb.net/medical-app')
   .then(() => console.log('Connected to MongoDB'))
   .catch(err => console.error('MongoDB connection error:', err));
 
