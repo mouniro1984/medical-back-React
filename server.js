@@ -8,11 +8,25 @@ import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
+import nodemailer from 'nodemailer';
 
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const transporter = nodemailer.createTransport({
+  host: 'smtp.gmail.com', // Hôte du serveur SMTP Gmail
+  port: 587, // Port pour TLS
+  secure: false, // Utiliser TLS, mais ne sécurise pas la connexion dès le départ
+  auth: {
+    user: 'nachit.mounir@gmail.com', // Votre adresse email
+    pass: 'txxe qxuv keqz pwmc', // Votre mot de passe (ou mot de passe d'application si l'authentification à deux facteurs est activée)
+  },
+  tls: {
+    rejectUnauthorized: false, // Permet d'ignorer les problèmes de certificat SSL (pas recommandé en production)
+  },
+});
 
 // MongoDB Models
 const userSchema = new mongoose.Schema({
@@ -86,6 +100,21 @@ const User = mongoose.model('User', userSchema);
 const Patient = mongoose.model('Patient', patientSchema);
 const Appointment = mongoose.model('Appointment', appointmentSchema);
 const MedicalRecord = mongoose.model('MedicalRecord', medicalRecordSchema);
+
+const sendEmail = async (to, subject, html) => {
+  try {
+    await transporter.sendMail({
+      from: '"Cabinet Médical" <noreply@cabinet-medical.com>',
+      to,
+      subject,
+      html
+    });
+    return true;
+  } catch (error) {
+    console.error('Error sending email:', error);
+    throw error;
+  }
+};
 
 // Multer Configuration
 const storage = multer.diskStorage({
@@ -276,6 +305,51 @@ app.delete('/api/users/:id', auth, adminAuth, async (req, res) => {
   }
 });
 
+// Patient Routes with Email Confirmation
+app.post('/api/patients', auth, async (req, res) => {
+  try {
+    const patient = new Patient({
+      ...req.body,
+      doctor: req.user.id
+    });
+    await patient.save();
+
+    // Send welcome email
+    try {
+      const emailHtml = `
+        <h2>Bienvenue ${patient.prenom} ${patient.nom}</h2>
+        <p>Votre compte patient a été créé avec succès dans notre cabinet médical.</p>
+        <p>Informations enregistrées :</p>
+        <ul>
+          <li>Nom : ${patient.nom}</li>
+          <li>Prénom : ${patient.prenom}</li>
+          <li>Email : ${patient.email}</li>
+          <li>Téléphone : ${patient.telephone}</li>
+        </ul>
+        <p>Votre médecin traitant pourra maintenant suivre votre dossier médical en toute sécurité.</p>
+        <p>Si vous n'êtes pas à l'origine de cette inscription, veuillez nous contacter immédiatement.</p>
+        <p>Cordialement,<br>L'équipe du Cabinet Médical</p>
+      `;
+
+      await sendEmail(
+        patient.email,
+        'Bienvenue au Cabinet Médical',
+        emailHtml
+      );
+
+      patient.emailConfirmed = true;
+      await patient.save();
+    } catch (emailError) {
+      console.error('Error sending welcome email:', emailError);
+      // Continue with the response even if email fails
+    }
+
+    res.status(201).json(patient);
+  } catch (error) {
+    res.status(400).json({ message: 'Erreur lors de la création du patient' });
+  }
+});
+
 // Patient Routes
 app.get('/api/patients', auth, async (req, res) => {
   try {
@@ -333,7 +407,48 @@ app.delete('/api/patients/:id', auth, async (req, res) => {
     res.status(500).json({ message: 'Erreur lors de la suppression du patient' });
   }
 });
+// Endpoint for manually sending confirmation email
+app.post('/api/patients/:id/send-confirmation', auth, async (req, res) => {
+  try {
+    const patient = await Patient.findOne({
+      _id: req.params.id,
+      doctor: req.user.id
+    });
 
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient non trouvé' });
+    }
+
+    const emailHtml = `
+      <h2>Bienvenue ${patient.prenom} ${patient.nom}</h2>
+      <p>Votre compte patient a été créé avec succès dans notre cabinet médical.</p>
+      <p>Informations enregistrées :</p>
+      <ul>
+        <li>Nom : ${patient.nom}</li>
+        <li>Prénom : ${patient.prenom}</li>
+        <li>Email : ${patient.email}</li>
+        <li>Téléphone : ${patient.telephone}</li>
+      </ul>
+      <p>Votre médecin traitant pourra maintenant suivre votre dossier médical en toute sécurité.</p>
+      <p>Si vous n'êtes pas à l'origine de cette inscription, veuillez nous contacter immédiatement.</p>
+      <p>Cordialement,<br>L'équipe du Cabinet Médical</p>
+    `;
+
+    await sendEmail(
+      patient.email,
+      'Bienvenue au Cabinet Médical',
+      emailHtml
+    );
+
+    patient.emailConfirmed = true;
+    await patient.save();
+
+    res.json({ message: 'Email de confirmation envoyé avec succès' });
+  } catch (error) {
+    console.error('Error sending confirmation email:', error);
+    res.status(500).json({ message: 'Erreur lors de l\'envoi de l\'email de confirmation' });
+  }
+});
 // Appointment Routes
 app.get('/api/appointments', auth, async (req, res) => {
   try {
