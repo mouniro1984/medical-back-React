@@ -181,6 +181,10 @@ mongoose.connect('mongodb+srv://mounirnachit:Ai8W9rq1nK89VGFN@cluster-medical.eo
   .then(() => console.log('Connected to MongoDB'))
   .catch(err => console.error('MongoDB connection error:', err));
 
+  app.get('/ping', (req, res) => {
+    res.status(200).send('Server is live');
+  });
+
 // Auth Routes
 app.post('/api/auth/login', async (req, res) => {
   try {
